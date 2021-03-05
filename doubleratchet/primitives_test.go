@@ -7,7 +7,7 @@ package doubleratchet
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/sha512"
+	"crypto/sha256"
 	"testing"
 )
 
@@ -209,7 +209,7 @@ func TestEncryptionDecryptionJitterCipher(t *testing.T) {
 	}
 
 	// Something went wrong within the ciphertext part.
-	for i := 0; i < len(ciphertext)-sha512.Size; i++ {
+	for i := 0; i < len(ciphertext)-sha256.Size; i++ {
 		ciphertext[i] ^= 0xff
 	}
 
@@ -240,7 +240,7 @@ func TestEncryptionDecryptionJitterHmac(t *testing.T) {
 	}
 
 	// Something went wrong within the HMAC part.
-	for i := len(ciphertext) - sha512.Size; i < len(ciphertext); i++ {
+	for i := len(ciphertext) - sha256.Size; i < len(ciphertext); i++ {
 		ciphertext[i] ^= 0xff
 	}
 
