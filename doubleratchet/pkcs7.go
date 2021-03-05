@@ -2,15 +2,15 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// This file implements trivial PKCS#7 padding, as needed for the internal
+// encryption in Double Ratchet's ENCRYPT/DECRYPT.
+
 package doubleratchet
 
 import (
 	"bytes"
 	"fmt"
 )
-
-// This file implements trivial PKCS#7 padding, as needed for the internal
-// encryption in Double Ratchet's ENCRYPT/DECRYPT.
 
 // pkcs7Pad adds a PKCS#7 padding based on a given block size, RFC 5652.
 func pkcs7Pad(data []byte, blockSize int) (paddedData []byte, err error) {

@@ -7,6 +7,7 @@ package doubleratchet
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha512"
 	"testing"
 )
 
@@ -100,5 +101,155 @@ func TestRootKdfOutput(t *testing.T) {
 		t.Fatal(err)
 	} else if len(rkOut) != 32 || len(ck) != 32 {
 		t.Fatalf("invalid output length, %v %v", rkOut, ck)
+	}
+}
+
+func TestEncryptionDecryption(t *testing.T) {
+	msgKey := make([]byte, 32)
+	associatedData := make([]byte, 32)
+	if _, err := rand.Read(msgKey); err != nil {
+		t.Fatal(err)
+	} else if _, err := rand.Read(associatedData); err != nil {
+		t.Fatal(err)
+	}
+
+	plaintextIn := []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
+
+	ciphertext, err := encrypt(msgKey, plaintextIn, associatedData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	plaintextOut, err := decrypt(msgKey, ciphertext, associatedData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(plaintextIn, plaintextOut) {
+		t.Fatalf("plaintext differs, %v %v", plaintextIn, plaintextOut)
+	}
+}
+
+func TestEncryptionDecryptionKeyOutOfSync(t *testing.T) {
+	msgKey := make([]byte, 32)
+	associatedData := make([]byte, 32)
+	if _, err := rand.Read(msgKey); err != nil {
+		t.Fatal(err)
+	} else if _, err := rand.Read(associatedData); err != nil {
+		t.Fatal(err)
+	}
+
+	plaintextIn := []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
+
+	ciphertext, err := encrypt(msgKey, plaintextIn, associatedData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The other peer's ratchet is out of sync.
+	if _, err := rand.Read(msgKey); err != nil {
+		t.Fatal(err)
+	}
+
+	plaintextOut, err := decrypt(msgKey, ciphertext, associatedData)
+	if err != nil {
+		return
+	}
+
+	if bytes.Equal(plaintextIn, plaintextOut) {
+		t.Fatal("AEAD decryption worked successfully")
+	}
+}
+
+func TestEncryptionDecryptionAdOutOfSync(t *testing.T) {
+	msgKey := make([]byte, 32)
+	associatedData := make([]byte, 32)
+	if _, err := rand.Read(msgKey); err != nil {
+		t.Fatal(err)
+	} else if _, err := rand.Read(associatedData); err != nil {
+		t.Fatal(err)
+	}
+
+	plaintextIn := []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
+
+	ciphertext, err := encrypt(msgKey, plaintextIn, associatedData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The other peer uses other associated data.
+	if _, err := rand.Read(associatedData); err != nil {
+		t.Fatal(err)
+	}
+
+	plaintextOut, err := decrypt(msgKey, ciphertext, associatedData)
+	if err != nil {
+		return
+	}
+
+	if bytes.Equal(plaintextIn, plaintextOut) {
+		t.Fatal("AEAD decryption worked successfully")
+	}
+}
+
+func TestEncryptionDecryptionJitterCipher(t *testing.T) {
+	msgKey := make([]byte, 32)
+	associatedData := make([]byte, 32)
+	if _, err := rand.Read(msgKey); err != nil {
+		t.Fatal(err)
+	} else if _, err := rand.Read(associatedData); err != nil {
+		t.Fatal(err)
+	}
+
+	plaintextIn := []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
+
+	ciphertext, err := encrypt(msgKey, plaintextIn, associatedData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Something went wrong within the ciphertext part.
+	for i := 0; i < len(ciphertext)-sha512.Size; i++ {
+		ciphertext[i] ^= 0xff
+	}
+
+	plaintextOut, err := decrypt(msgKey, ciphertext, associatedData)
+	if err != nil {
+		return
+	}
+
+	if !bytes.Equal(plaintextIn, plaintextOut) {
+		t.Fatal("AEAD decryption worked successfully")
+	}
+}
+
+func TestEncryptionDecryptionJitterHmac(t *testing.T) {
+	msgKey := make([]byte, 32)
+	associatedData := make([]byte, 32)
+	if _, err := rand.Read(msgKey); err != nil {
+		t.Fatal(err)
+	} else if _, err := rand.Read(associatedData); err != nil {
+		t.Fatal(err)
+	}
+
+	plaintextIn := []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
+
+	ciphertext, err := encrypt(msgKey, plaintextIn, associatedData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Something went wrong within the HMAC part.
+	for i := len(ciphertext) - sha512.Size; i < len(ciphertext); i++ {
+		ciphertext[i] ^= 0xff
+	}
+
+	plaintextOut, err := decrypt(msgKey, ciphertext, associatedData)
+	if err != nil {
+		return
+	}
+
+	if !bytes.Equal(plaintextIn, plaintextOut) {
+		t.Fatal("AEAD decryption worked successfully")
 	}
 }
