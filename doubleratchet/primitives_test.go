@@ -5,9 +5,36 @@
 package doubleratchet
 
 import (
-	"math/rand"
+	"bytes"
+	"crypto/rand"
 	"testing"
 )
+
+func TestDh(t *testing.T) {
+	alicePub, alicePriv, err := dhKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bobPub, bobPriv, err := dhKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	aliceSec, err := dh(alicePriv, bobPub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bobSec, err := dh(bobPriv, alicePub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(aliceSec, bobSec) {
+		t.Fatalf("Alice's and Bob's secret differ, %v %v", aliceSec, bobSec)
+	}
+}
 
 func TestChainKdfInput(t *testing.T) {
 	testcases := []struct {
@@ -28,8 +55,6 @@ func TestChainKdfInput(t *testing.T) {
 }
 
 func TestChainKdfOutput(t *testing.T) {
-	rand.Seed(23)
-
 	ckIn := make([]byte, 32)
 	if _, err := rand.Read(ckIn); err != nil {
 		t.Fatal(err)
@@ -62,8 +87,6 @@ func TestRootKdfInput(t *testing.T) {
 }
 
 func TestRootKdfOutput(t *testing.T) {
-	rand.Seed(23)
-
 	rkIn := make([]byte, 32)
 	dh := make([]byte, 32)
 	if _, err := rand.Read(rkIn); err != nil {
