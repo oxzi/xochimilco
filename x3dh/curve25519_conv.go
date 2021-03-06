@@ -23,7 +23,7 @@ import (
 
 func ed25519PrivateKeyToCurve25519(pk ed25519.PrivateKey) []byte {
 	h := sha512.New()
-	h.Write(pk.Seed())
+	_, _ = h.Write(pk.Seed())
 	out := h.Sum(nil)
 	return out[:curve25519.ScalarSize]
 }
