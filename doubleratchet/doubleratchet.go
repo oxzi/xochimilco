@@ -9,9 +9,6 @@ import (
 	"fmt"
 )
 
-// maxSkip for each receiving chain.
-const maxSkip int = 32
-
 // Header represents an unencrypted Double Ratchet message header.
 //
 // A header contains the sender's current DH ratchet public key, the previous
@@ -37,8 +34,7 @@ type DoubleRatchet struct {
 	recvNo     int
 	prevSendNo int
 
-	// dhPub -> recvNo -> msgKey
-	skippedMsgKeys map[[32]byte]map[int][]byte
+	msgKeyBuffer *keyBuffer
 }
 
 // CreateActive creates a Double Ratchet for the active part, Alice.
@@ -52,7 +48,7 @@ func CreateActive(sessKey, associatedData, peerDhPub []byte) (dr *DoubleRatchet,
 		associatedData: associatedData,
 		dhr:            dhr,
 		peerDhPub:      peerDhPub,
-		skippedMsgKeys: make(map[[32]byte]map[int][]byte),
+		msgKeyBuffer:   newKeyBuffer(),
 	}
 	return
 }
@@ -67,7 +63,7 @@ func CreatePassive(sessKey, associatedData, dhPub, dhPriv []byte) (dr *DoubleRat
 	dr = &DoubleRatchet{
 		associatedData: associatedData,
 		dhr:            dhr,
-		skippedMsgKeys: make(map[[32]byte]map[int][]byte),
+		msgKeyBuffer:   newKeyBuffer(),
 	}
 	return
 }
@@ -115,8 +111,8 @@ func (dr *DoubleRatchet) Encrypt(plaintext []byte) (header Header, ciphertext []
 //
 // This might be necessary if received messages are either lost or out of order.
 func (dr *DoubleRatchet) skipMsgKeys(until int) (err error) {
-	if dr.recvNo+maxSkip < until {
-		return fmt.Errorf("cannot skip until %d, maximum is %d", until, dr.recvNo+maxSkip)
+	if dr.recvNo+maxSkipElements < until {
+		return fmt.Errorf("cannot skip until %d, maximum is %d", until, dr.recvNo+maxSkipElements)
 	}
 
 	// Cannot skip messages without an existing receiving chain. This happens in
@@ -126,26 +122,13 @@ func (dr *DoubleRatchet) skipMsgKeys(until int) (err error) {
 	}
 
 	for ; dr.recvNo < until; dr.recvNo++ {
-		var (
-			msgKey  []byte
-			dhPubId [32]byte
-			subMap  map[int][]byte
-			ok      bool
-		)
-
+		var msgKey []byte
 		dr.chainKeyRecv, msgKey, err = chainKdf(dr.chainKeyRecv)
 		if err != nil {
 			return
 		}
 
-		copy(dhPubId[:], dr.peerDhPub)
-		subMap, ok = dr.skippedMsgKeys[dhPubId]
-		if !ok {
-			subMap = make(map[int][]byte)
-		}
-
-		subMap[dr.recvNo] = msgKey
-		dr.skippedMsgKeys[dhPubId] = subMap
+		dr.msgKeyBuffer.insert(dr.peerDhPub, dr.recvNo, msgKey)
 	}
 
 	return
@@ -173,22 +156,9 @@ func (dr *DoubleRatchet) Decrypt(header Header, ciphertext []byte) (plaintext []
 	var msgKey []byte
 	switch {
 	case header.MsgNo < dr.recvNo:
-		var dhPubId [32]byte
-		copy(dhPubId[:], header.DhPub)
-
-		subMap, ok := dr.skippedMsgKeys[dhPubId]
-		if !ok {
-			return nil, fmt.Errorf("old message was not cached")
-		}
-
-		msgKey, ok = subMap[header.MsgNo]
-		if !ok {
-			return nil, fmt.Errorf("old message was not cached")
-		}
-
-		delete(subMap, header.MsgNo)
-		if len(subMap) == 0 {
-			delete(dr.skippedMsgKeys, dhPubId)
+		msgKey, err = dr.msgKeyBuffer.find(header.DhPub, header.MsgNo)
+		if err != nil {
+			return
 		}
 
 	case header.MsgNo > dr.recvNo:
