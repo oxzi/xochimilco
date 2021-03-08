@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestDoubelRatchetPingPong(t *testing.T) {
+func TestDoubleRatchetPingPong(t *testing.T) {
 	sessKey := make([]byte, 32)
 	if _, err := rand.Read(sessKey); err != nil {
 		t.Fatal(err)
@@ -33,48 +33,41 @@ func TestDoubelRatchetPingPong(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	at1 := []byte("hello bob")
-	ah1, ac1, err := alice.Encrypt(at1)
-	if err != nil {
-		t.Fatal(err)
+	actions := []struct {
+		sender   *DoubleRatchet
+		receiver *DoubleRatchet
+		msgs     int
+	}{
+		{alice, bob, 1},
+		{bob, alice, 1},
+		{alice, bob, 2},
+		{bob, alice, 3},
+		{alice, bob, 5},
+		{bob, alice, 8},
+		{alice, bob, 13},
+		{bob, alice, 21},
 	}
 
-	bat1, err := bob.Decrypt(ah1, ac1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, action := range actions {
+		for i := 0; i < action.msgs; i++ {
+			msgIn := make([]byte, 16)
+			if _, err := rand.Read(msgIn); err != nil {
+				t.Fatal(err)
+			}
 
-	if !bytes.Equal(at1, bat1) {
-		t.Fatalf("plaintext differ, %s %s", at1, bat1)
-	}
+			header, ciphertext, err := action.sender.Encrypt(msgIn)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	bt1 := []byte("hello alice")
-	bh1, bc1, err := bob.Encrypt(bt1)
-	if err != nil {
-		t.Fatal(err)
-	}
+			msgOut, err := action.receiver.Decrypt(header, ciphertext)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	abt1, err := alice.Decrypt(bh1, bc1)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !bytes.Equal(bt1, abt1) {
-		t.Fatalf("plaintext differ, %s %s", bt1, abt1)
-	}
-
-	bt2 := []byte("another message from bob")
-	bh2, bc2, err := bob.Encrypt(bt2)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	abt2, err := alice.Decrypt(bh2, bc2)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !bytes.Equal(bt2, abt2) {
-		t.Fatalf("plaintext differ, %s %s", bt2, abt2)
+			if !bytes.Equal(msgIn, msgOut) {
+				t.Fatalf("plaintext differ, %x %x", msgIn, msgOut)
+			}
+		}
 	}
 }

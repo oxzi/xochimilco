@@ -62,13 +62,11 @@ func CreatePassive(sessKey, associatedData, dhPub, dhPriv []byte) (dr *DoubleRat
 	return
 }
 
-// DhStep performs a Diffie-Hellman ratchet step.
+// dhStep performs a Diffie-Hellman ratchet step.
 //
 // This is performed automatically if the other party's DH ratchet has proceeded
 // or for the active part's initial encrypted message.
-//
-// Otherwise, this might be called whenever the application software demands.
-func (dr *DoubleRatchet) DhStep() (err error) {
+func (dr *DoubleRatchet) dhStep() (err error) {
 	dr.sendNo = 0
 	dr.recvNo = 0
 
@@ -79,7 +77,7 @@ func (dr *DoubleRatchet) DhStep() (err error) {
 // Encrypt a plaintext message for the other party.
 func (dr *DoubleRatchet) Encrypt(plaintext []byte) (header Header, ciphertext []byte, err error) {
 	if dr.chainKeySend == nil {
-		err = dr.DhStep()
+		err = dr.dhStep()
 		if err != nil {
 			return
 		}
@@ -112,7 +110,7 @@ func (dr *DoubleRatchet) Decrypt(header Header, ciphertext []byte) (plaintext []
 	if subtle.ConstantTimeCompare(header.DhPub, dr.peerDhPub) != 1 {
 		dr.peerDhPub = header.DhPub
 
-		err = dr.DhStep()
+		err = dr.dhStep()
 		if err != nil {
 			return
 		}
