@@ -7,10 +7,11 @@ package doubleratchet
 import (
 	"bytes"
 	"crypto/rand"
+	norand "math/rand"
 	"testing"
 )
 
-func TestDoubleRatchetPingPong(t *testing.T) {
+func testDoubleRatchetSetup(t *testing.T) (alice, bob *DoubleRatchet) {
 	sessKey := make([]byte, 32)
 	if _, err := rand.Read(sessKey); err != nil {
 		t.Fatal(err)
@@ -23,16 +24,21 @@ func TestDoubleRatchetPingPong(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	alice, err := CreateActive(sessKey, associatedData, bobPub)
+	alice, err = CreateActive(sessKey, associatedData, bobPub)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	bob, err := CreatePassive(sessKey, associatedData, bobPub, bobPriv)
+	bob, err = CreatePassive(sessKey, associatedData, bobPub, bobPriv)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	return
+}
+
+func TestDoubleRatchetPingPong(t *testing.T) {
+	alice, bob := testDoubleRatchetSetup(t)
 	actions := []struct {
 		sender   *DoubleRatchet
 		receiver *DoubleRatchet
@@ -67,6 +73,102 @@ func TestDoubleRatchetPingPong(t *testing.T) {
 
 			if !bytes.Equal(msgIn, msgOut) {
 				t.Fatalf("plaintext differ, %x %x", msgIn, msgOut)
+			}
+		}
+	}
+}
+
+func TestDoubleRatchetLoss(t *testing.T) {
+	alice, bob := testDoubleRatchetSetup(t)
+	actions := []struct {
+		sender   *DoubleRatchet
+		receiver *DoubleRatchet
+		msgs     int
+		losses   int
+	}{
+		{alice, bob, 1, 0},
+		{bob, alice, 1, 1},
+		{alice, bob, 2, 1},
+		{bob, alice, 3, 2},
+		{alice, bob, 5, 3},
+		{bob, alice, 7, 5},
+	}
+
+	for _, action := range actions {
+		for i := 0; i < action.msgs; i++ {
+			msgIn := make([]byte, 16)
+			if _, err := rand.Read(msgIn); err != nil {
+				t.Fatal(err)
+			}
+
+			header, ciphertext, err := action.sender.Encrypt(msgIn)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if i < action.losses {
+				continue
+			}
+
+			msgOut, err := action.receiver.Decrypt(header, ciphertext)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !bytes.Equal(msgIn, msgOut) {
+				t.Fatalf("plaintext differ, %x %x", msgIn, msgOut)
+			}
+		}
+	}
+}
+
+func TestDoubleRatchetOutOfOrder(t *testing.T) {
+	alice, bob := testDoubleRatchetSetup(t)
+	actions := []struct {
+		sender   *DoubleRatchet
+		receiver *DoubleRatchet
+		msgs     int
+	}{
+		{alice, bob, 2},
+		{bob, alice, 3},
+		{alice, bob, 5},
+		{bob, alice, 7},
+		{alice, bob, 11},
+		{bob, alice, 19},
+		{alice, bob, 23},
+		{bob, alice, 29},
+	}
+
+	for _, action := range actions {
+		var err error
+
+		headers := make([]Header, action.msgs)
+		ciphertexts := make([][]byte, action.msgs)
+
+		for i := 0; i < action.msgs; i++ {
+			msgIn := make([]byte, 16)
+			if _, err := rand.Read(msgIn); err != nil {
+				t.Fatal(err)
+			}
+
+			headers[i], ciphertexts[i], err = action.sender.Encrypt(msgIn)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		order := make([]int, action.msgs)
+		for i := 0; i < len(order); i++ {
+			order[i] = i
+		}
+		norand.Shuffle(len(order), func(i, j int) {
+			order[i], order[j] = order[j], order[i]
+		})
+
+		for _, i := range order {
+			_, err = action.receiver.Decrypt(headers[i], ciphertexts[i])
+			if err != nil {
+				t.Fatal(err)
 			}
 		}
 	}
