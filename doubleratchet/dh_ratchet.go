@@ -2,14 +2,19 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// This file implements the Diffie-Hellman ratchet with a linked root chain.
+
 package doubleratchet
 
-// dhRatchet represents a Diffie-Hellman ratchet.
+// dhRatchet represents a Diffie-Hellman ratchet including a KDF based on a
+// common secret / root key to derive the sending and receiving chain keys.
 //
-// This really only includes the DH ratchet to create new DH secrets to be used
-// for the sending and receiving chain. Those values SHOULD be fed into a KDF
-// based on the root key.
+// The integrated root chain prevents a MITM from announcing new DH parameters.
+// Thus, at most the communication can be broken, but not taken over. The
+// verification takes place in the DECRYPT function, which re-calculates an HMAC
+// based on the sending/receiving chain's parameters, derived from the KDF_RK.
 type dhRatchet struct {
+	rootKey   []byte
 	dhPub     []byte
 	dhPriv    []byte
 	peerDhPub []byte
@@ -19,9 +24,10 @@ type dhRatchet struct {
 }
 
 // dhRatchetActive creates a DH ratchet for the active peer, Alice.
-func dhRatchetActive(peerDhPub []byte) (r *dhRatchet, err error) {
+func dhRatchetActive(rootKey, peerDhPub []byte) (r *dhRatchet, err error) {
 	r = &dhRatchet{
 		isActive:  true,
+		rootKey:   rootKey,
 		peerDhPub: peerDhPub,
 	}
 
@@ -30,9 +36,10 @@ func dhRatchetActive(peerDhPub []byte) (r *dhRatchet, err error) {
 }
 
 // dhRatchetPassive creates a DH ratchet for the passive peer, Bob.
-func dhRatchetPassive(dhPub, dhPriv []byte) (r *dhRatchet, err error) {
+func dhRatchetPassive(rootKey, dhPub, dhPriv []byte) (r *dhRatchet, err error) {
 	r = &dhRatchet{
 		isActive: false,
+		rootKey:  rootKey,
 		dhPub:    dhPub,
 		dhPriv:   dhPriv,
 	}
@@ -55,6 +62,10 @@ func (r *dhRatchet) step(peerDhPub []byte) (dhPub, sendKey, recvKey []byte, err 
 		if err != nil {
 			return
 		}
+		r.rootKey, sendKey, err = rootKdf(r.rootKey, sendKey)
+		if err != nil {
+			return
+		}
 
 		r.isInitialized = true
 		return
@@ -67,6 +78,10 @@ func (r *dhRatchet) step(peerDhPub []byte) (dhPub, sendKey, recvKey []byte, err 
 	if err != nil {
 		return
 	}
+	r.rootKey, recvKey, err = rootKdf(r.rootKey, recvKey)
+	if err != nil {
+		return
+	}
 
 	// ..and proceed ourselves.
 	r.dhPub, r.dhPriv, err = dhKeyPair()
@@ -76,5 +91,13 @@ func (r *dhRatchet) step(peerDhPub []byte) (dhPub, sendKey, recvKey []byte, err 
 	dhPub = r.dhPub
 
 	sendKey, err = dh(r.dhPriv, r.peerDhPub)
+	if err != nil {
+		return
+	}
+	r.rootKey, sendKey, err = rootKdf(r.rootKey, sendKey)
+	if err != nil {
+		return
+	}
+
 	return
 }

@@ -6,6 +6,7 @@ package doubleratchet
 
 import (
 	"bytes"
+	"crypto/rand"
 	"testing"
 )
 
@@ -15,12 +16,17 @@ func TestDhRatchetPingPong(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	alice, err := dhRatchetActive(bobPub)
+	rootKey := make([]byte, 32)
+	if _, err := rand.Read(rootKey); err != nil {
+		t.Fatal(err)
+	}
+
+	alice, err := dhRatchetActive(rootKey, bobPub)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	bob, err := dhRatchetPassive(bobPub, bobPriv)
+	bob, err := dhRatchetPassive(rootKey, bobPub, bobPriv)
 	if err != nil {
 		t.Fatal(err)
 	}
