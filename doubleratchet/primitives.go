@@ -183,6 +183,10 @@ func decrypt(msgKey, ciphertext, associatedData []byte) (plaintext []byte, err e
 		return
 	}
 
+	if len(ciphertext)-sha256.Size < 0 {
+		return nil, fmt.Errorf("ciphertext is too short")
+	}
+
 	aesCipher := ciphertext[:len(ciphertext)-sha256.Size]
 	if len(aesCipher)%aes.BlockSize != 0 {
 		return nil, fmt.Errorf("ciphertext is not aligned to block size")

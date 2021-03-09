@@ -140,7 +140,7 @@ func (dr *DoubleRatchet) skipMsgKeys(until int) (err error) {
 // The encryption is an AEAD encryption. Thus, a changed message should be
 // detected and result in an error.
 func (dr *DoubleRatchet) Decrypt(ciphertext []byte) (plaintext []byte, err error) {
-	if len(ciphertext) < headerLen {
+	if len(ciphertext) <= headerLen {
 		return nil, fmt.Errorf("ciphertext is too short")
 	}
 

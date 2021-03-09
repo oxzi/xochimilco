@@ -30,7 +30,7 @@ func pkcs7Unpad(paddedData []byte, blockSize int) (data []byte, err error) {
 
 	if blockSize <= 0 || blockSize > 255 {
 		return nil, fmt.Errorf("block size MUST be between 1 and 255")
-	} else if paddedDataLen%blockSize != 0 {
+	} else if paddedDataLen%blockSize != 0 || paddedDataLen == 0 {
 		return nil, fmt.Errorf("padded data is not aligned")
 	}
 
