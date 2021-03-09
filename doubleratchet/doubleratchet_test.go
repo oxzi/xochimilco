@@ -61,12 +61,12 @@ func TestDoubleRatchetPingPong(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			header, ciphertext, err := action.sender.Encrypt(msgIn)
+			ciphertext, err := action.sender.Encrypt(msgIn)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			msgOut, err := action.receiver.Decrypt(header, ciphertext)
+			msgOut, err := action.receiver.Decrypt(ciphertext)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +101,7 @@ func TestDoubleRatchetLoss(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			header, ciphertext, err := action.sender.Encrypt(msgIn)
+			ciphertext, err := action.sender.Encrypt(msgIn)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -110,7 +110,7 @@ func TestDoubleRatchetLoss(t *testing.T) {
 				continue
 			}
 
-			msgOut, err := action.receiver.Decrypt(header, ciphertext)
+			msgOut, err := action.receiver.Decrypt(ciphertext)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -141,8 +141,6 @@ func TestDoubleRatchetOutOfOrder(t *testing.T) {
 
 	for _, action := range actions {
 		var err error
-
-		headers := make([]Header, action.msgs)
 		ciphertexts := make([][]byte, action.msgs)
 
 		for i := 0; i < action.msgs; i++ {
@@ -151,22 +149,18 @@ func TestDoubleRatchetOutOfOrder(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			headers[i], ciphertexts[i], err = action.sender.Encrypt(msgIn)
+			ciphertexts[i], err = action.sender.Encrypt(msgIn)
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		order := make([]int, action.msgs)
-		for i := 0; i < len(order); i++ {
-			order[i] = i
-		}
-		norand.Shuffle(len(order), func(i, j int) {
-			order[i], order[j] = order[j], order[i]
+		norand.Shuffle(len(ciphertexts), func(i, j int) {
+			ciphertexts[i], ciphertexts[j] = ciphertexts[j], ciphertexts[i]
 		})
 
-		for _, i := range order {
-			_, err = action.receiver.Decrypt(headers[i], ciphertexts[i])
+		for _, ciphertext := range ciphertexts {
+			_, err = action.receiver.Decrypt(ciphertext)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -9,17 +9,6 @@ import (
 	"fmt"
 )
 
-// Header represents an unencrypted Double Ratchet message header.
-//
-// A header contains the sender's current DH ratchet public key, the previous
-// chain length (PN), and the this message's chain number (N). The Double
-// Ratchet Algorithm specification names this as HEADER.
-type Header struct {
-	DhPub  []byte
-	PrevNo int
-	MsgNo  int
-}
-
 // DoubleRatchet implements the Double Ratchet Algorithm.
 type DoubleRatchet struct {
 	associatedData []byte
@@ -82,7 +71,9 @@ func (dr *DoubleRatchet) dhStep() (err error) {
 }
 
 // Encrypt a plaintext message for the other party.
-func (dr *DoubleRatchet) Encrypt(plaintext []byte) (header Header, ciphertext []byte, err error) {
+//
+// The resulting ciphertext will already include the necessary header.
+func (dr *DoubleRatchet) Encrypt(plaintext []byte) (ciphertext []byte, err error) {
 	if dr.chainKeySend == nil {
 		err = dr.dhStep()
 		if err != nil {
@@ -96,14 +87,24 @@ func (dr *DoubleRatchet) Encrypt(plaintext []byte) (header Header, ciphertext []
 		return
 	}
 
-	header = Header{
-		DhPub:  dr.dhr.dhPub,
-		PrevNo: dr.prevSendNo,
-		MsgNo:  dr.sendNo,
+	h := header{
+		dhPub:  dr.dhr.dhPub,
+		prevNo: dr.prevSendNo,
+		msgNo:  dr.sendNo,
 	}
 	dr.sendNo++
 
+	hData, err := h.marshal()
+	if err != nil {
+		return
+	}
+
 	ciphertext, err = encrypt(msgKey, plaintext, dr.associatedData)
+	if err != nil {
+		return
+	}
+
+	ciphertext = append(hData, ciphertext...)
 	return
 }
 
@@ -138,14 +139,23 @@ func (dr *DoubleRatchet) skipMsgKeys(until int) (err error) {
 //
 // The encryption is an AEAD encryption. Thus, a changed message should be
 // detected and result in an error.
-func (dr *DoubleRatchet) Decrypt(header Header, ciphertext []byte) (plaintext []byte, err error) {
-	if subtle.ConstantTimeCompare(header.DhPub, dr.peerDhPub) != 1 {
-		err = dr.skipMsgKeys(header.PrevNo)
+func (dr *DoubleRatchet) Decrypt(ciphertext []byte) (plaintext []byte, err error) {
+	if len(ciphertext) < headerLen {
+		return nil, fmt.Errorf("ciphertext is too short")
+	}
+
+	h, err := parseHeader(ciphertext[:headerLen])
+	if err != nil {
+		return
+	}
+
+	if subtle.ConstantTimeCompare(h.dhPub, dr.peerDhPub) != 1 {
+		err = dr.skipMsgKeys(h.prevNo)
 		if err != nil {
 			return
 		}
 
-		dr.peerDhPub = header.DhPub
+		dr.peerDhPub = h.dhPub
 
 		err = dr.dhStep()
 		if err != nil {
@@ -155,20 +165,20 @@ func (dr *DoubleRatchet) Decrypt(header Header, ciphertext []byte) (plaintext []
 
 	var msgKey []byte
 	switch {
-	case header.MsgNo < dr.recvNo:
-		msgKey, err = dr.msgKeyBuffer.find(header.DhPub, header.MsgNo)
+	case h.msgNo < dr.recvNo:
+		msgKey, err = dr.msgKeyBuffer.find(h.dhPub, h.msgNo)
 		if err != nil {
 			return
 		}
 
-	case header.MsgNo > dr.recvNo:
-		err = dr.skipMsgKeys(header.MsgNo)
+	case h.msgNo > dr.recvNo:
+		err = dr.skipMsgKeys(h.msgNo)
 		if err != nil {
 			return
 		}
 		fallthrough
 
-	case header.MsgNo == dr.recvNo:
+	case h.msgNo == dr.recvNo:
 		dr.chainKeyRecv, msgKey, err = chainKdf(dr.chainKeyRecv)
 		if err != nil {
 			return
@@ -176,6 +186,6 @@ func (dr *DoubleRatchet) Decrypt(header Header, ciphertext []byte) (plaintext []
 		dr.recvNo++
 	}
 
-	plaintext, err = decrypt(msgKey, ciphertext, dr.associatedData)
+	plaintext, err = decrypt(msgKey, ciphertext[headerLen:], dr.associatedData)
 	return
 }
