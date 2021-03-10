@@ -2,6 +2,38 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Package doubleratchet implements a variant of the Double Ratchet Algorithm.
+//
+// The Double Ratchet Algorithm by Perrin and Marlinspike[0] is to be used by
+// two parties to exchange encrypted messages based on a shared secret. Thus, a
+// key agreement protocol needs to be used first, e.g., X3DH as also implemented
+// in this repository.
+//
+// The following implementation decisions were made; always following the
+// recommendations within the specification.
+//
+// For the Diffie-Hellman key exchange, X25519 based on Curve25519 is used.
+//
+// The key derivation functions, both for the root key chain as well as the
+// sending and receiving chains, are based on SHA-256. This hash algorithm was
+// chosen over SHA-512 to save 32 bytes. The root key's KDF is an HKDF and the
+// other KDF uses an HMAC, as recommended by the specification.
+//
+// For AEAC encryption, AES-256 is used in CBC mode. To fit the AES block size,
+// the input is padded with PKCS#7. Finally, an HMAC is attached.
+//
+// This implementation does not perform the optional header encryption. Each
+// message header contains the sender's current DH public key next to its
+// position within the current sending chain and the previous chain length.
+// This data is not confidential.
+//
+// A buffer to allow skipping lost or out-of-order messages is implemented to
+// support up to eight previous chains, with 32 skipped messages in each. This
+// is a compromise between a very lossy link and the possibility for an attacker
+// to reserve lots of memory on the victim's machine.
+//
+// 	[0] https://signal.org/docs/specifications/doubleratchet/
+//
 package doubleratchet
 
 import (
@@ -10,6 +42,18 @@ import (
 )
 
 // DoubleRatchet implements the Double Ratchet Algorithm.
+//
+// This allows sending and receiving PFS encrypted messages. It is also possible
+// to skipp a certain amount of messages or decrypt them out of order.
+//
+// For the Double Ratchet's initialization, the roles of an active and passive
+// part (Alice and Bob) needs to be assigned the used application protocol.
+// After the first two messages - starting with Alice, bob follows - the order
+// of encryption and decryption calls is no longer relevant. However, Alice MUST
+// send her first message to Bob in order to synchronize the internal state.
+//
+// The implementation design and chosen algorithms were documented in this
+// package's documentation.
 type DoubleRatchet struct {
 	associatedData []byte
 
@@ -27,6 +71,8 @@ type DoubleRatchet struct {
 }
 
 // CreateActive creates a Double Ratchet for the active part, Alice.
+//
+// The active peer MUST send the first message.
 func CreateActive(sessKey, associatedData, peerDhPub []byte) (dr *DoubleRatchet, err error) {
 	dhr, err := dhRatchetActive(sessKey, peerDhPub)
 	if err != nil {
@@ -43,6 +89,8 @@ func CreateActive(sessKey, associatedData, peerDhPub []byte) (dr *DoubleRatchet,
 }
 
 // CreatePassive creates a Double Ratchet for the passive part, Bob.
+//
+// The passive peer MUST receive a message first.
 func CreatePassive(sessKey, associatedData, dhPub, dhPriv []byte) (dr *DoubleRatchet, err error) {
 	dhr, err := dhRatchetPassive(sessKey, dhPub, dhPriv)
 	if err != nil {
@@ -72,7 +120,7 @@ func (dr *DoubleRatchet) dhStep() (err error) {
 
 // Encrypt a plaintext message for the other party.
 //
-// The resulting ciphertext will already include the necessary header.
+// The resulting ciphertext will include the necessary header.
 func (dr *DoubleRatchet) Encrypt(plaintext []byte) (ciphertext []byte, err error) {
 	if dr.chainKeySend == nil {
 		err = dr.dhStep()
