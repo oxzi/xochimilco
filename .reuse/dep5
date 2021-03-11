@@ -4,11 +4,11 @@ Upstream-Contact: Alvar Penning <post@0x21.biz>
 Source: https://github.com/oxzi/xochimilco
 
 Files: LICENSE
-Copyright: Alvar Penning
+Copyright: GNU GPL authors
 License: GPL-3.0-or-later
 Comment: Golang's documentation tool requires this file..
 
 Files: README.md go.mod go.sum
 Copyright: Alvar Penning
-License: GPL-3.0-or-later
+License: CC0-1.0
 Comment: Those files are secondary; I only want a header within the code.
