@@ -27,7 +27,7 @@ const headerLen = 32 + 2 + 2
 
 // marshal this header into bytes.
 func (h header) marshal() (data []byte, err error) {
-	if h.prevNo >= 2<<15 || h.msgNo >= 2<<15 {
+	if h.prevNo >= 1<<16 || h.msgNo >= 1<<16 {
 		return nil, fmt.Errorf("header numbers MUST be uint16")
 	}
 
