@@ -8,7 +8,7 @@ Copyright: GNU GPL authors
 License: GPL-3.0-or-later
 Comment: Golang's documentation tool requires this file..
 
-Files: README.md go.mod go.sum
+Files: README.md go.mod go.sum .github/workflows/*
 Copyright: Alvar Penning
 License: CC0-1.0
 Comment: Those files are secondary; I only want a header within the code.
