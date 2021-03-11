@@ -109,3 +109,88 @@ func TestSessionPingPong(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSessionInvalidVerifyBob(t *testing.T) {
+	// Alice and Bob already know the other party's public key.
+	_, alicePriv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, bobPriv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	alice := Session{
+		IdentityKey: alicePriv,
+		VerifyPeer: func(peer ed25519.PublicKey) (valid bool) {
+			return false
+		},
+	}
+
+	bob := Session{
+		IdentityKey: bobPriv,
+		VerifyPeer: func(peer ed25519.PublicKey) (valid bool) {
+			return false
+		},
+	}
+
+	// Alice starts by offering Bob to upgrade the connection.
+	offerMsg, err := alice.Offer()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Bob acknowledges Alice's offer. However, Bob's verification fails.
+	_, err = bob.Acknowledge(offerMsg)
+	if err == nil {
+		t.Fatal("should fail")
+	}
+}
+
+func TestSessionInvalidVerifyAlice(t *testing.T) {
+	// Alice and Bob already know the other party's public key.
+	alicePub, alicePriv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, bobPriv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	alice := Session{
+		IdentityKey: alicePriv,
+		VerifyPeer: func(peer ed25519.PublicKey) (valid bool) {
+			return false
+		},
+	}
+
+	bob := Session{
+		IdentityKey: bobPriv,
+		VerifyPeer: func(peer ed25519.PublicKey) (valid bool) {
+			return peer.Equal(alicePub)
+		},
+	}
+
+	// Alice starts by offering Bob to upgrade the connection.
+	offerMsg, err := alice.Offer()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Bob acknowledges Alice's offer.
+	ackMsg, err := bob.Acknowledge(offerMsg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Alice evaluates Bob's acknowledgement.
+	// But wait, Alice's verification fails.
+	_, _, _, err = alice.Receive(ackMsg)
+	if err == nil {
+		t.Fatal("should fail")
+	}
+}
