@@ -22,27 +22,24 @@ const (
 	// conversation by advertising her X3DH parameters.
 	sessOffer
 
-	// sessInit is Bob's first answer, including his X3DH parameters as well as
+	// sessAck is Bob's first answer, including his X3DH parameters as well as
 	// a first nonsense message as a ciphertext to setup the Double Ratchet.
-	sessInit
+	sessAck
 
 	// sessData are encrypted messages exchanged between the both parties.
 	sessData
 
-	// sessAbort cancels a Xochimilco session. This is possible in each state
+	// sessClose cancels a Xochimilco session. This is possible in each state
 	// and might occur due to a regular closing as well as rejecting an identity
 	// key.
 	// A MITM can also send this. However, a MITM can also drop messages.
-	sessAbort
+	sessClose
 
 	// Prefix indicates the beginning of an encoded message.
-	//
-	// The origin of those cute axolotl emoticons is
-	// <https://www.deviantart.com/pinkaxolotl/journal/Axolotl-Emoticons-272995225>
-	Prefix string = "≽(◔ _ ◔)≼"
+	Prefix string = "!XO!"
 
 	// Suffix indicates the end of an encoded message.
-	Suffix string = "≽(◕ _ ◕)≼"
+	Suffix string = "!OX!"
 )
 
 // marshalMessage creates the entire encoded message from a struct.
@@ -81,12 +78,12 @@ func unmarshalMessage(in string) (t messageType, m interface{}, err error) {
 	switch t = messageType(in[len(Prefix)] - '0'); t {
 	case sessOffer:
 		m = new(offerMessage)
-	case sessInit:
-		m = new(initMessage)
+	case sessAck:
+		m = new(ackMessage)
 	case sessData:
 		m = new(dataMessage)
-	case sessAbort:
-		m = new(abortMessage)
+	case sessClose:
+		m = new(closeMessage)
 	default:
 		err = fmt.Errorf("unsupported message type %d", t)
 		return
@@ -137,17 +134,17 @@ func (msg *offerMessage) UnmarshalBinary(data []byte) (err error) {
 	return
 }
 
-// initMessage is the second sessInit message for Bob to acknowledge Alice's
+// ackMessage is the second sessAck message for Bob to acknowledge Alice's
 // sessOffer, finishing X3DH and starting his Double Ratchet. The fields are
 // Bob's Ed25519 public key (32 byte), his ephemeral X25519 key (32 byte) and a
 // nonsense initial ciphertext.
-type initMessage struct {
+type ackMessage struct {
 	idKey  []byte
 	eKey   []byte
 	cipher []byte
 }
 
-func (msg initMessage) MarshalBinary() (data []byte, err error) {
+func (msg ackMessage) MarshalBinary() (data []byte, err error) {
 	data = make([]byte, 32+32+len(msg.cipher))
 
 	copy(data[:32], msg.idKey)
@@ -157,9 +154,9 @@ func (msg initMessage) MarshalBinary() (data []byte, err error) {
 	return
 }
 
-func (msg *initMessage) UnmarshalBinary(data []byte) (err error) {
+func (msg *ackMessage) UnmarshalBinary(data []byte) (err error) {
 	if len(data) <= 32+32 {
-		return fmt.Errorf("sessInit payload MUST be >= 64 byte")
+		return fmt.Errorf("sessAck payload MUST be >= 64 byte")
 	}
 
 	msg.idKey = make([]byte, 32)
@@ -186,16 +183,16 @@ func (msg *dataMessage) UnmarshalBinary(data []byte) (err error) {
 	return
 }
 
-// abortMessage is the bidirectional sessAbort message. Its payload ix 0xff.
-type abortMessage []byte
+// closeMessage is the bidirectional sessClose message. Its payload ix 0xff.
+type closeMessage []byte
 
-func (msg abortMessage) MarshalBinary() (data []byte, err error) {
+func (msg closeMessage) MarshalBinary() (data []byte, err error) {
 	return msg, nil
 }
 
-func (msg *abortMessage) UnmarshalBinary(data []byte) (err error) {
+func (msg *closeMessage) UnmarshalBinary(data []byte) (err error) {
 	if subtle.ConstantTimeCompare(data, []byte{0xff}) != 1 {
-		err = fmt.Errorf("sessAbort has an inavlid payload")
+		err = fmt.Errorf("sessClose has an inavlid payload")
 	} else {
 		*msg = data
 	}

@@ -24,8 +24,8 @@ func TestMessageMarshall(t *testing.T) {
 			},
 		},
 		{
-			t: sessInit,
-			m: &initMessage{
+			t: sessAck,
+			m: &ackMessage{
 				idKey:  []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2},
 				eKey:   []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2},
 				cipher: []byte{1, 2, 3, 4, 5, 6, 7},
@@ -36,8 +36,8 @@ func TestMessageMarshall(t *testing.T) {
 			m: &dataMessage{1, 2, 3, 4, 5, 6, 7},
 		},
 		{
-			t: sessAbort,
-			m: &abortMessage{0xff},
+			t: sessClose,
+			m: &closeMessage{0xff},
 		},
 	}
 
